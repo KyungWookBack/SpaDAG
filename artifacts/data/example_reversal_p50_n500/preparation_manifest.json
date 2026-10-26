@@ -1,0 +1,50 @@
+{
+  "created_by": "spadag-prepare",
+  "data_fingerprint": "ea75e2a855931f62e73e294a86d172de2fd9f701a427b915a904251a86bf8eee",
+  "dimensions": {
+    "H": 36,
+    "L": 66,
+    "T": 50,
+    "n": 500,
+    "p": 50
+  },
+  "inference_schema_version": 1,
+  "kl": {
+    "L": 66,
+    "a": 0.01,
+    "b": 1.0,
+    "energy_kept": 1.0,
+    "max_range": 1.0,
+    "pointwise_variance_max": 0.7019878832612132,
+    "pointwise_variance_median": 0.677655738108689,
+    "pointwise_variance_min": 0.666452281153744,
+    "pointwise_variance_min_max_ratio": 0.9493786104364337,
+    "poly_degree": 10,
+    "rank": 36,
+    "source": "BayesGPfit"
+  },
+  "mesh": {
+    "coordinate_max": [
+      1.0,
+      1.0
+    ],
+    "coordinate_min": [
+      0.0,
+      0.0
+    ],
+    "domain_source": "user-rectangle",
+    "n_grid": 5,
+    "polygon": null,
+    "seed": null,
+    "target_tris": null,
+    "type": "regular"
+  },
+  "sha256": {
+    "A_kl.npy": "3d570f85422d9b52a0c06ac9f91380df29599e02480e4d9bda69dc90afd015b3",
+    "Phi_obs.npy": "7fa6a6890ba0281b3c9e020da8e42125f31ccc938ae2e546ea6a910921c890a0",
+    "X.npy": "19bd15786d3faca119ba76e1a25dc8dfbe464825a31ce19bd774dc943e8914ce",
+    "mesh_points.npy": "a6cd86c133c564fc2d66d884a17f4db07eae50a140450cfef8b421a58492e9fc",
+    "mesh_triangles.npy": "e096c7a27b537191f92c4e42e6ed6b2df1dad5a0e2fad0552536922738906bde",
+    "obs_points.npy": "9ae127eea65c81d45152d4e8caaa8e894a5c0417a8aad503ba74e6b5c6ca883e"
+  }
+}

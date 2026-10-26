@@ -1,0 +1,17 @@
+* text=auto
+
+*.py text eol=lf
+*.R text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.cff text eol=lf
+*.css text eol=lf
+*.txt text eol=lf
+SHA256SUMS text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+*.npy binary

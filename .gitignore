@@ -1,0 +1,48 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+build/
+*.egg-info/
+dist/
+
+# Local secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+
+# R session state
+.Rhistory
+.RData
+.Ruserdata
+
+# Generated experiment outputs (keep the small reference dataset in artifacts/data)
+artifacts/runs/
+artifacts/results/
+artifacts/checkpoints/
+
+# Local process output
+/stdout
+
+# OS and editor noise
+/.obsidian/
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
+# Only the example bundle is distributed as numerical data.
+*.npy
+*.npz
+*.pkl
+*.pickle
+/artifacts/data/*
+!/artifacts/data/reversal_cohort_seeds.json
+!/artifacts/data/example_reversal_p50_n500/
+!/artifacts/data/example_reversal_p50_n500/*.npy

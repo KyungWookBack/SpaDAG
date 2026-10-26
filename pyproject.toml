@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spadag"
+version = "0.1.0"
+description = "Spatially varying directed acyclic graph inference"
+authors = [
+  { name = "Kyung Wook Back", email = "benforgem@gmail.com" },
+]
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+diagnostics = [
+  "arviz>=0.20,<0.23",
+  "psutil>=5.9",
+]
+prepare = [
+  "matplotlib>=3.7",
+  "contourpy>=1.0",
+  "triangle>=20230923",
+]
+generator = [
+  "matplotlib>=3.7",
+  "contourpy>=1.0",
+  "triangle>=20230923",
+]
+test = [
+  "pytest>=7",
+]
+
+[project.scripts]
+spadag = "spadag.cli:main"
+spadag-prepare = "spadag.prepare:main"
+spadag-evaluate = "spadag.evaluation:main"
+spadag-diagnose = "spadag.diagnostics:main"
+spadag-generate-reversal = "spadag.sim.generate_reversal:main"
+
+[tool.setuptools]
+package-dir = {"" = "code"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["code"]
+include = ["spadag*"]
+exclude = ["tests*", "private*"]
+
+[tool.setuptools.package-data]
+spadag = ["r_bridges/*.R"]
+
+[tool.pytest.ini_options]
+testpaths = ["code/tests"]
+pythonpath = ["code"]
+addopts = "-ra"
