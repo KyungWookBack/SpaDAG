@@ -10,13 +10,14 @@ import numpy as np
 import pytest
 
 from spadag.cli import parse_args, run_shared_gp_pg
+from spadag.compact_storage import load_stream
 from spadag.mcmc_data import load_inference_data
 from spadag.p1_geometry import p1_integration_weights
 from spadag.prepare import parse_args as parse_prepare_args
 from spadag.prepare import prepare_inference_bundle
 from spadag.shared_gp_pg import build_gp_decomposition
 from spadag.spatial_gp import KLDesign
-from toy_data_fixture import temporary_toy_bundle, write_tiny_toy_bundle
+from toy_data_fixture import temporary_toy_bundle
 
 
 def _fixed_positive_omega(eta):
@@ -54,13 +55,14 @@ def test_full_rank_design_unchanged_and_zero_free_coefficient_rejected() -> None
             build_gp_decomposition(single)
 
 
-def test_sampler_runs_with_more_modes_than_vertices() -> None:
+def test_sampler_runs_with_more_modes_than_vertices(tmp_path: Path) -> None:
+    trace = tmp_path / "trace"
     with temporary_toy_bundle(include_truth=False) as bundle:
         np.save(bundle / "A_kl.npy", _wide_design(4, 6))
         data = load_inference_data(bundle)
         args = parse_args([
-            "--data", str(bundle), "--storage-profile", "legacy",
-            "--iters", "4", "--burn", "1", "--thin", "1",
+            "--data", str(bundle), "--trace-dir", str(trace),
+            "--iters", "4", "--burn", "1", "--thin", "1", "--scalar-thin", "1",
             "--log-every", "0", "--seed", "3",
         ])
         args.common_gp_var = 1.0
@@ -68,7 +70,11 @@ def test_sampler_runs_with_more_modes_than_vertices() -> None:
         result = run_shared_gp_pg(data, args, draw_omega=_fixed_positive_omega)
     assert np.all(np.isfinite(result["edge_prob"]))
     assert result["edge_prob"].shape == (2, 3, 3)
-    assert np.all(np.isfinite(result["common_gp_var_full_trace"]))
+    manifest = json.loads((trace / "manifest.json").read_text(encoding="utf-8"))
+    scalar = load_stream(trace, manifest["head"], "scalar")
+    common_var = scalar["values"][:, manifest["scalar_names"].index("common_var")]
+    assert common_var.shape == (4,)
+    assert np.all(np.isfinite(common_var))
 
 
 def _lattice(n_side: int = 12) -> np.ndarray:

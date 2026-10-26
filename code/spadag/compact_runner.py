@@ -1,9 +1,8 @@
-"""Grid storage for a SpaDAG chain.
+"""Run a SpaDAG chain with grid storage.
 
-The sweep is the same as in the in-memory (legacy) profile; only what is
-retained differs.  Retained draws are written to append-only chunk files, so the
-checkpoint holds no draw history.  Iteration counts are one-based completed
-global sweeps.
+Retained draws are written to append-only chunk files and posterior summaries
+are accumulated online, so the checkpoint holds no draw history.  Iteration
+counts are one-based completed global sweeps.
 """
 from __future__ import annotations
 
@@ -29,10 +28,13 @@ FORMAT = "spadag-compact-1"
 
 
 def read_checkpoint(path):
-    with Path(path).open("rb") as f:
-        result = pickle.load(f)
+    try:
+        with Path(path).open("rb") as f:
+            result = pickle.load(f)
+    except (EOFError, pickle.UnpicklingError, AttributeError, ImportError, IndexError) as exc:
+        raise ValueError(f"invalid or corrupted checkpoint {path}: {exc}") from exc
     if not isinstance(result, dict) or result.get("format") != FORMAT:
-        raise ValueError("expected a grid checkpoint; use --continue-from for a legacy-profile checkpoint")
+        raise ValueError("expected a SpaDAG grid checkpoint")
     return result
 
 
@@ -72,8 +74,7 @@ def scalar_names(data, shared):
             + [f"xi0[{l}]" for l in range(shared.decomposition.common_basis.shape[1])])
 
 
-def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature,
-                continuation_signature, read_legacy, stop_exception,
+def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature, stop_exception,
                 draw_omega, get_omega_state, set_omega_state):
     directory = Path(args.trace_dir)
     targets = load_targets(args.diagnostic_targets, data)
@@ -129,28 +130,14 @@ def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature,
             raise ValueError("new compact run requires an empty trace directory")
         if args.checkpoint and Path(args.checkpoint).exists():
             raise ValueError("new compact checkpoint path already exists; choose a fresh run path")
-        if args.continue_from:
-            # A legacy-profile checkpoint continues state only; its retained
-            # draws are not merged into the new summaries.
-            payload = read_legacy(args.continue_from)
-            if continuation_signature(payload["signature"]) != continuation_signature(signature):
-                raise ValueError("legacy continuation model settings do not match")
-            if args.burn != 0:
-                raise ValueError("legacy-to-compact continuation requires --burn 0")
-            start = int(payload["completed_iterations"]) + int(payload.get("continued_from_iteration", 0))
-            acc["origin"] = start
-            if args.iters <= start:
-                raise ValueError("compact --iters is a global target, including legacy iterations")
     if payload is not None:
         if set_omega_state is None:
-            raise ValueError("continuation requires a Pólya-Gamma RNG state setter")
+            raise ValueError("resume requires a Pólya-Gamma RNG state setter")
         rng.bit_generator.state = payload["numpy_rng_state"]
         set_omega_state(payload["omega_rng_state"])
         st, cfg, shared = payload["sampler_state"], payload["sampler_config"], payload["shared_gp_state"]
         edge_var = payload["edge_gp_var"]
         common_var = payload["common_gp_var"]
-        if args.continue_from:
-            acc["initial_active_gamma"] = int(st.gamma.sum())
     if args.checkpoint and get_omega_state is None:
         raise ValueError("checkpoint requires a Pólya-Gamma RNG state getter")
     directory.mkdir(parents=True, exist_ok=True)

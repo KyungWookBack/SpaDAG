@@ -8,7 +8,7 @@ from pathlib import Path
 from spadag.cli import parse_args
 
 
-_DATA = ["--data", "bundle", "--storage-profile", "legacy"]
+_DATA = ["--data", "bundle", "--trace-dir", "trace"]
 
 
 def _assert_parse_error(argv) -> None:
@@ -23,6 +23,7 @@ def _assert_parse_error(argv) -> None:
 
 def test_required_data_and_defaults() -> None:
     _assert_parse_error([])
+    _assert_parse_error(["--data", "bundle"])
     args = parse_args(_DATA)
     assert args.v0 == 1e-3
     assert args.common_gp_var == 1.0
@@ -36,15 +37,16 @@ def test_required_data_and_defaults() -> None:
     assert args.mu_prior_mean == 0.0
     assert args.mu_prior_sd == 2.0
     assert args.data == Path("bundle")
+    assert args.trace_dir == Path("trace")
     assert args.a_b == 1.0
     assert args.b_b == 1.0
     assert args.sigma_b2_init == 1.0
     assert args.initialization == "empty"
     assert args.thin == 5
-    assert args.field_thin == 5
+    assert args.field_thin == 0
     assert args.iters == 50000 and args.burn == 25000
     assert args.checkpoint_every == 0 and args.milestone_every == 0
-    assert args.gamma_trace_thin == 0
+    assert args.gamma_trace_thin == 10
 
 
 def test_optional_settings_are_parsed() -> None:
@@ -111,7 +113,7 @@ def test_invalid_values_are_rejected() -> None:
     _assert_parse_error(_DATA + ["--mu-prior-sd", "0"])
     _assert_parse_error(_DATA + ["--mu-init", "nan"])
     _assert_parse_error(_DATA + ["--iters", "20", "--burn", "20"])
-    _assert_parse_error(_DATA + ["--field-thin", "0"])
+    _assert_parse_error(_DATA + ["--field-thin", "-1"])
     _assert_parse_error(_DATA + ["--gamma-trace-thin", "-1"])
 
 
@@ -124,6 +126,9 @@ def test_removed_options_are_rejected() -> None:
         ["--spike-mode", "decoupled"],
         ["--kappa0", "0.001"],
         ["--diagnostic-windows", "3"],
+        ["--storage-profile", "legacy"],
+        ["--storage-profile", "grid"],
+        ["--continue-from", "checkpoint.pkl"],
     ):
         _assert_parse_error(_DATA + option)
 

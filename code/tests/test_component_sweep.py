@@ -3,7 +3,6 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import numpy as np
-import pytest
 
 from spadag.cli import DEFAULT_M_REV, _checkpoint_signature, _resolved_m_rev, parse_args, sweep_shared_gp_pg
 from spadag.component_reversal import MeshComponents, attempt_component_reversal
@@ -47,7 +46,7 @@ def test_composed_sweep_matches_five_explicit_attempts():
 def test_signature_distinguishes_kernel_and_free_prior():
     with temporary_toy_bundle() as bundle:
         data = load_inference_data(bundle)
-        args = parse_args(['--data', str(bundle), '--storage-profile', 'legacy'])
+        args = parse_args(['--data', str(bundle), '--trace-dir', 'trace'])
         assert args.m_rev is None and args.a_b == args.b_b == 1.
         latest = _checkpoint_signature(data, args)
         args.m_rev = 0
@@ -71,22 +70,18 @@ def test_default_is_fifty_and_explicit_override():
     assert _resolved_m_rev(SimpleNamespace(m_rev=7)) == 7
 
 
-@pytest.mark.parametrize('profile', ['grid', 'legacy'])
-def test_auto_matches_explicit_count_and_checkpoint(tmp_path, profile):
+def test_auto_matches_explicit_count_and_checkpoint(tmp_path):
     from tests.test_compact_storage import args_for, run, same_state
-    import pickle
+    from spadag.compact_runner import read_checkpoint
     with temporary_toy_bundle() as bundle:
         data = load_inference_data(bundle)
-        auto = args_for(bundle, tmp_path/'auto', iters=7, profile=profile)
-        explicit = args_for(bundle, tmp_path/'explicit', iters=7, profile=profile,
+        auto = args_for(bundle, tmp_path/'auto', iters=7)
+        explicit = args_for(bundle, tmp_path/'explicit', iters=7,
                             extra=['--m-rev', str(DEFAULT_M_REV)])
         assert _checkpoint_signature(data, auto) == _checkpoint_signature(data, explicit)
         a, b = run(data, auto), run(data, explicit)
         assert auto.m_rev is None  # The API namespace can be reused for other p.
-        with auto.checkpoint.open('rb') as f:
-            ca = pickle.load(f)
-        with explicit.checkpoint.open('rb') as f:
-            cb = pickle.load(f)
+        ca, cb = read_checkpoint(auto.checkpoint), read_checkpoint(explicit.checkpoint)
         same_state(ca, cb)
         assert ca['signature'] == cb['signature']
         assert a['m_rev'] == b['m_rev'] == DEFAULT_M_REV

@@ -1,8 +1,13 @@
 """Self-contained integration checks for the main shared-GP runner."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
 import numpy as np
 
+from spadag.compact_storage import load_stream
 from spadag.mcmc_data import load_inference_data
 from spadag.cli import parse_args, run_shared_gp_pg
 from tests.toy_data_fixture import temporary_toy_bundle
@@ -12,14 +17,34 @@ def _fixed_positive_omega(eta):
     return np.full(np.asarray(eta).shape, 0.25, dtype=float)
 
 
-def test_short_runner_integration() -> None:
+def _manifest(trace_dir: Path) -> dict:
+    return json.loads((trace_dir / "manifest.json").read_text(encoding="utf-8"))
+
+
+def _stream(trace_dir: Path, stream: str) -> dict:
+    return load_stream(trace_dir, _manifest(trace_dir)["head"], stream)
+
+
+def _assert_probabilities(result, data) -> None:
+    p, H, T = data.p, data.H, len(data.triangles)
+    assert result["gamma_prob"].shape == (p, p, H)
+    assert result["b_mean"].shape == (p, p, H)
+    assert result["edge_prob"].shape == (T, p, p)
+    for key in ("gamma_prob", "edge_prob"):
+        assert np.all((result[key] >= 0.0) & (result[key] <= 1.0)), key
+    assert np.all(np.isfinite(result["b_mean"]))
+
+
+def test_short_runner_integration(tmp_path: Path) -> None:
+    trace = tmp_path / "trace"
     with temporary_toy_bundle(include_truth=False) as bundle:
         data = load_inference_data(bundle)
         args = parse_args([
-            "--data", str(bundle), "--storage-profile", "legacy",
+            "--data", str(bundle), "--trace-dir", str(trace),
             "--iters", "3",
             "--burn", "1",
             "--thin", "1",
+            "--scalar-thin", "1",
             "--field-thin", "2",
             "--gamma-trace-thin", "1",
             "--log-every", "0",
@@ -45,44 +70,44 @@ def test_short_runner_integration() -> None:
     ):
         assert removed not in result
     assert result["kept"] == 2
-    assert result["field_kept"] == 1
-    assert result["q_mean"].shape == (data.p, data.p, data.H)
-    assert result["eta_mean"].shape == (data.p, data.p, data.H)
-    assert result["theta0_trace"].shape == (2, data.L)
-    assert result["gamma_trace_packed"].shape[0] == 2
+    manifest = _manifest(trace)
+    E = len(data.pairs)
+    field = _stream(trace, "field")
+    assert field["eta"].shape == (1, E, data.H)
+    assert np.all(np.isfinite(field["eta"]))
+    _assert_probabilities(result, data)
+    packed = _stream(trace, "gamma")["packed"]
+    assert packed.shape[0] == 2
     unpacked = np.unpackbits(
-        result["gamma_trace_packed"],
+        packed,
         axis=1,
-        count=int(result["gamma_trace_n_bits"]),
-        bitorder=str(result["gamma_trace_bitorder"]),
-    ).reshape(2, len(data.pairs), data.H)
+        count=E * data.H,
+        bitorder=manifest["gamma_bitorder"],
+    ).reshape(2, E, data.H)
     expected_gamma_prob = np.stack([
         result["gamma_prob"][j, k] for j, k in data.pairs
     ])
     assert np.allclose(np.mean(unpacked, axis=0), expected_gamma_prob)
-    assert np.all(np.isfinite(result["q_mean"]))
-    assert np.all((result["q_mean"] >= 0.0) & (result["q_mean"] <= 1.0))
-    assert np.isfinite(result["common_precision_condition_max"])
-    assert np.isclose(np.sum(result["baseline_integration_weights"]), 1.0)
-    assert result["baseline_constraint_error"] < 1e-10
-    assert result["edge_gp_var_trace"].shape == (2,)
-    assert np.all(np.isfinite(result["edge_gp_var_trace"]))
-    assert np.all(result["edge_gp_var_trace"] > 0.0)
-    assert np.isclose(
-        result["edge_gp_var"],
-        np.mean(result["edge_gp_var_trace"]),
-    )
+    assert manifest["integrity"]["failures"] == 0
+    assert manifest["integrity"]["baseline_max"] < 1e-10
+    scalar = _stream(trace, "scalar")
+    edge_var = scalar["values"][scalar["postburn"], manifest["scalar_names"].index("edge_var")]
+    assert edge_var.shape == (2,)
+    assert np.all(np.isfinite(edge_var))
+    assert np.all(edge_var > 0.0)
 
 
-def test_short_constrained_runner_integration() -> None:
+def test_short_constrained_runner_integration(tmp_path: Path) -> None:
+    trace = tmp_path / "trace"
     with temporary_toy_bundle() as bundle:
         data = load_inference_data(bundle)
         args = parse_args([
-            "--data", str(bundle), "--storage-profile", "legacy",
+            "--data", str(bundle), "--trace-dir", str(trace),
             "--iters", "3",
             "--burn", "1",
             "--thin", "1",
             "--field-thin", "2",
+            "--latent-thin", "1",
             "--log-every", "0",
             "--seed", "23",
         ])
@@ -93,40 +118,41 @@ def test_short_constrained_runner_integration() -> None:
         )
 
     assert result["kept"] == 2
-    assert result["common_null_dimension"] == data.L - 1
-    assert np.isclose(np.sum(result["integration_weights"]), 1.0)
-    assert np.isclose(
-        result["edge_gp_var_raw"],
-        result["edge_gp_var"] * len(data.pairs) / (len(data.pairs) - 1),
-    )
-    assert np.allclose(
-        result["edge_gp_var_raw_trace"],
-        result["edge_gp_var_trace"]
-        * len(data.pairs) / (len(data.pairs) - 1),
-    )
-    assert result["common_constraint_error_max"] < 1e-10
-    assert result["edge_constraint_error_max"] < 1e-10
-    weighted_f0 = result["f0_trace"] @ result["integration_weights"]
+    with np.load(trace / "geometry.npz") as geometry:
+        common_basis = geometry["common_basis"]
+        integration_weights = geometry["integration_weights"]
+        A = geometry["A"]
+    assert common_basis.shape == (data.L, data.L - 1)
+    assert np.isclose(np.sum(integration_weights), 1.0)
+    integrity = _manifest(trace)["integrity"]
+    assert integrity["common_max"] < 1e-10
+    assert integrity["edge_max"] < 1e-10
+    xi0 = _stream(trace, "latent")["xi0"]
+    assert xi0.shape == (2, data.L - 1)
+    weighted_f0 = (xi0 @ common_basis.T @ A.T) @ integration_weights
     assert np.max(np.abs(weighted_f0)) < 1e-10
-    assert np.max(np.abs(result["fbar_trace"])) < 1e-10
-    assert np.all(np.isfinite(result["q_mean"]))
-    assert np.all((result["q_mean"] >= 0.0) & (result["q_mean"] <= 1.0))
+    _assert_probabilities(result, data)
 
 
-def test_diagnostic_storage_preserves_trajectory() -> None:
+def test_diagnostic_storage_preserves_trajectory(tmp_path: Path) -> None:
     with temporary_toy_bundle() as bundle:
         data = load_inference_data(bundle)
         common = [
-            "--data", str(bundle), "--storage-profile", "legacy",
+            "--data", str(bundle),
             "--iters", "8",
             "--burn", "2",
             "--thin", "2",
+            "--scalar-thin", "1",
             "--field-thin", "3",
             "--log-every", "0",
             "--seed", "91",
         ]
-        args_off = parse_args(common)
+        args_off = parse_args(common + [
+            "--trace-dir", str(tmp_path / "off"),
+            "--gamma-trace-thin", "0",
+        ])
         args_on = parse_args(common + [
+            "--trace-dir", str(tmp_path / "on"),
             "--gamma-trace-thin", "2",
         ])
         for args in (args_off, args_on):
@@ -139,35 +165,42 @@ def test_diagnostic_storage_preserves_trajectory() -> None:
             data, args_on, draw_omega=_fixed_positive_omega
         )
 
+    assert _stream(args_off.trace_dir, "gamma") == {}
+    assert len(_stream(args_on.trace_dir, "gamma")["iteration"]) == 3
     keys = [
-        "mu_full_trace",
-        "active_gamma_full_trace",
-        "sigma_b2_trace",
-        "theta0_trace",
         "gamma_prob",
         "edge_prob",
-        "q_mean",
-        "eta_mean",
+        "b_mean",
+        "b_candidate_sd",
     ]
     for key in keys:
         assert np.array_equal(result_off[key], result_on[key]), key
+    for stream in ("scalar", "field"):
+        off = _stream(args_off.trace_dir, stream)
+        on = _stream(args_on.trace_dir, stream)
+        assert off.keys() == on.keys(), stream
+        for key in off:
+            assert np.array_equal(off[key], on[key]), f"{stream}/{key}"
 
 
-def test_adding_or_changing_truth_does_not_affect_trajectory() -> None:
+def test_adding_or_changing_truth_does_not_affect_trajectory(tmp_path: Path) -> None:
     with temporary_toy_bundle() as bundle:
         data = load_inference_data(bundle)
         argv = [
-            "--data", str(bundle), "--storage-profile", "legacy",
+            "--data", str(bundle),
             "--iters", "3",
             "--burn", "1",
             "--thin", "1",
+            "--scalar-thin", "1",
             "--common-gp-var", "1",
             "--edge-gp-var", "1",
             "--log-every", "0",
             "--seed", "41",
         ]
         first = run_shared_gp_pg(
-            data, parse_args(argv), draw_omega=_fixed_positive_omega
+            data,
+            parse_args(argv + ["--trace-dir", str(tmp_path / "first")]),
+            draw_omega=_fixed_positive_omega,
         )
         np.save(bundle / "gamma.npy", np.ones((3, 3, 4), dtype=int))
         np.save(bundle / "b_coeffs.npy", np.full((3, 3, 4), 99.0))
@@ -175,25 +208,29 @@ def test_adding_or_changing_truth_does_not_affect_trajectory() -> None:
         changed_truth = load_inference_data(bundle)
         second = run_shared_gp_pg(
             changed_truth,
-            parse_args(argv),
+            parse_args(argv + ["--trace-dir", str(tmp_path / "second")]),
             draw_omega=_fixed_positive_omega,
         )
 
     for key in (
-        "active_gamma_full_trace",
-        "sigma_b2_trace",
-        "mu_full_trace",
-        "edge_gp_var_full_trace",
         "gamma_prob",
+        "edge_prob",
         "b_mean",
-        "q_mean",
     ):
         assert np.array_equal(first[key], second[key]), key
+    for stream in ("scalar", "gamma"):
+        a = _stream(tmp_path / "first", stream)
+        b = _stream(tmp_path / "second", stream)
+        assert a.keys() == b.keys(), stream
+        for key in a:
+            assert np.array_equal(a[key], b[key]), f"{stream}/{key}"
 
 
 if __name__ == "__main__":
-    test_short_runner_integration()
-    test_short_constrained_runner_integration()
-    test_diagnostic_storage_preserves_trajectory()
-    test_adding_or_changing_truth_does_not_affect_trajectory()
+    with TemporaryDirectory() as directory:
+        root = Path(directory)
+        test_short_runner_integration(root / "short")
+        test_short_constrained_runner_integration(root / "constrained")
+        test_diagnostic_storage_preserves_trajectory(root / "storage")
+        test_adding_or_changing_truth_does_not_affect_trajectory(root / "truth")
     print("shared-GP runner integration checks passed")

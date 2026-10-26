@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 
 import numpy as np
 import pytest
 from scipy.stats import invgamma, norm
 
 from spadag.cli import parse_args, run_shared_gp_pg
+from spadag.compact_storage import load_stream
 from spadag.mcmc_data import load_inference_data
 from spadag.shared_gp_pg import (
     SharedGPState,
@@ -214,12 +216,13 @@ def test_nodal_field_norm_is_not_a_common_variance_sufficient_statistic() -> Non
     ))
 
 
-def _short_run(bundle, data):
+def _short_run(bundle, data, trace_dir):
     args = parse_args([
-        "--data", str(bundle), "--storage-profile", "legacy",
+        "--data", str(bundle), "--trace-dir", str(trace_dir),
         "--iters", "12",
         "--burn", "4",
         "--thin", "1",
+        "--scalar-thin", "1",
         "--log-every", "0",
         "--seed", "5",
     ])
@@ -228,19 +231,20 @@ def _short_run(bundle, data):
     return run_shared_gp_pg(data, args, draw_omega=_fixed_positive_omega)
 
 
-def test_learned_sigma0_varies_and_stays_finite() -> None:
+def test_learned_sigma0_varies_and_stays_finite(tmp_path) -> None:
+    trace = tmp_path / "trace"
     with temporary_toy_bundle() as bundle:
         data = load_inference_data(bundle)
-        learned = _short_run(bundle, data)
+        _short_run(bundle, data, trace)
 
-    full_trace = learned["common_gp_var_full_trace"]
-    retained = learned["common_gp_var_trace"]
+    manifest = json.loads((trace / "manifest.json").read_text(encoding="utf-8"))
+    scalar = load_stream(trace, manifest["head"], "scalar")
+    full_trace = scalar["values"][:, manifest["scalar_names"].index("common_var")]
+    retained = full_trace[scalar["postburn"]]
     assert full_trace.shape == (12,)
     assert retained.shape == (8,)
     assert np.all(np.isfinite(full_trace)) and np.all(full_trace > 0.0)
     assert np.unique(full_trace).size == full_trace.size
-    assert learned["common_gp_var"] == pytest.approx(float(np.mean(retained)))
-    assert learned["common_gp_var_init"] == 1.0
-    assert learned["a_sigma0"] == 2.0 and learned["b_sigma0"] == 1.0
-    low, high = learned["common_gp_var_ci"]
-    assert 0.0 < low <= high
+    settings = manifest["signature"]["settings"]
+    assert settings["common_gp_var"] == 1.0
+    assert settings["a_sigma0"] == 2.0 and settings["b_sigma0"] == 1.0

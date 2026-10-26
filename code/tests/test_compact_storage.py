@@ -1,6 +1,5 @@
 """Observer invariance, online estimands and crash/continuation protocol tests."""
 import json
-import pickle
 import shutil
 
 import numpy as np
@@ -8,7 +7,7 @@ import pytest
 
 from spadag.cli import CheckpointStop, parse_args, run_shared_gp_pg
 from spadag.compact_runner import read_checkpoint
-from spadag.compact_storage import (ChunkWriter, Moments, chunk_links, iter_chunks,
+from spadag.compact_storage import (ChunkWriter, Moments, chunk_links,
                                    load_stream, triangle_coefficients)
 from spadag.mcmc_data import load_inference_data
 from spadag.polya_gamma import BayesLogitRPGSampler, bayeslogit_available
@@ -16,15 +15,12 @@ from tests.test_shared_gp_checkpoint import _MockPGSampler
 from tests.toy_data_fixture import temporary_toy_bundle
 
 
-def args_for(bundle, root, *, iters=37, extra=(), profile="grid"):
+def args_for(bundle, root, *, iters=37, extra=()):
     argv = ["--data", str(bundle), "--iters", str(iters), "--burn", "3", "--thin", "2",
-            "--field-thin", "2" if profile == "legacy" else "0",
-            "--gamma-trace-thin", "3", "--common-gp-var", "1", "--edge-gp-var", "1",
+            "--field-thin", "0", "--gamma-trace-thin", "3", "--common-gp-var", "1", "--edge-gp-var", "1",
             "--log-every", "0", "--seed", "902", "--checkpoint", str(root / "checkpoint.pkl"),
-            "--checkpoint-every", "7", "--storage-profile", profile]
-    if profile == "grid":
-        argv += ["--trace-dir", str(root / "trace"), "--scalar-thin", "2", "--block-iterations", "10",
-                 "--chunk-iterations", "5"]
+            "--checkpoint-every", "7", "--trace-dir", str(root / "trace"), "--scalar-thin", "2",
+            "--block-iterations", "10", "--chunk-iterations", "5"]
     return parse_args(argv + list(extra))
 
 
@@ -50,16 +46,14 @@ def same_state(a, b):
 def test_observer_and_online_estimands(tmp_path):
     with temporary_toy_bundle() as bundle:
         data = load_inference_data(bundle)
-        legacy_args = args_for(bundle, tmp_path / "legacy", profile="legacy")
-        legacy = run(data, legacy_args)
+        plain_args = args_for(bundle, tmp_path / "plain")
+        plain = run(data, plain_args)
         grid_args = args_for(bundle, tmp_path / "grid", extra=["--b-trace-thin", "2", "--latent-thin", "2"])
         compact = run(data, grid_args)
-        with legacy_args.checkpoint.open("rb") as f:
-            old = pickle.load(f)
         new = read_checkpoint(grid_args.checkpoint)
-        same_state(old, new)
-        assert np.array_equal(legacy["edge_prob"], compact["edge_prob"])
-        assert np.allclose(legacy["b_mean"], compact["b_mean"], atol=1e-14)
+        same_state(read_checkpoint(plain_args.checkpoint), new)
+        assert np.array_equal(plain["edge_prob"], compact["edge_prob"])
+        assert np.array_equal(plain["b_mean"], compact["b_mean"])
         draws = load_stream(grid_args.trace_dir, new["head"], "b")["values"]
         for key, raw in (("b", draws), ("signed", np.stack([triangle_coefficients(x, data.triangles)[0] for x in draws])),
                          ("rms", np.stack([triangle_coefficients(x, data.triangles)[1] for x in draws]))):
@@ -157,20 +151,9 @@ def test_bounded_buffers_and_single_draw_moments(tmp_path):
     assert np.isnan(moments.sd()).all()
 
 
-def test_legacy_migration_and_constant_checkpoint_size(tmp_path):
+def test_constant_checkpoint_size(tmp_path):
     with temporary_toy_bundle() as bundle:
         data = load_inference_data(bundle)
-        old_args = args_for(bundle, tmp_path / "old", iters=16, profile="legacy")
-        run(data, old_args)
-        migrated_args = args_for(bundle, tmp_path / "new", extra=["--continue-from", str(old_args.checkpoint), "--burn", "0"])
-        migrated = run(data, migrated_args)
-        full_args = args_for(bundle, tmp_path / "full")
-        run(data, full_args)
-        same_state(read_checkpoint(migrated_args.checkpoint), read_checkpoint(full_args.checkpoint))
-        assert migrated["kept"] == 11  # globals 17,19,...37
-        # New storage is explicit; changing a model setting is rejected.
-        with pytest.raises(ValueError, match="model settings"):
-            run(data, args_for(bundle, tmp_path / "bad", extra=["--continue-from", str(old_args.checkpoint), "--burn", "0", "--mu-prior-sd", "3"]))
         # One attempt per sweep: component records waiting in the chunk buffer
         # make the size fluctuate by a few KB at larger --m-rev, without growth.
         small = args_for(bundle, tmp_path / "size", iters=20, extra=["--milestone-every", "20", "--m-rev", "1"])
@@ -189,7 +172,7 @@ def test_writer_lock_and_resume_cli(tmp_path):
         with pytest.raises(RuntimeError, match="already has a writer"):
             with writer_lock(tmp_path):
                 pass
-    args = parse_args(["--data", "bundle", "--storage-profile", "legacy", "--resume", "run/checkpoint.pkl", "--checkpoint-every", "5000"])
+    args = parse_args(["--data", "bundle", "--trace-dir", "run/trace", "--resume", "run/checkpoint.pkl", "--checkpoint-every", "5000"])
     assert args.checkpoint == args.resume
 
 
@@ -224,7 +207,5 @@ def test_targets_precision_and_grid_cli(tmp_path):
                      + (latent["xi0"] @ basis.T @ data.A_kl.T)[:, None, :]
                      + latent["mu"][:, None, None])
         np.testing.assert_allclose(recovered, field["eta"], atol=1e-12)
-        default = parse_args(["--data", str(bundle), "--storage-profile", "grid", "--trace-dir", "fresh"])
+        default = parse_args(["--data", str(bundle), "--trace-dir", "fresh"])
         assert (default.thin, default.scalar_thin, default.gamma_trace_thin, default.field_thin) == (5, 5, 10, 0)
-        with pytest.raises(SystemExit):
-            parse_args(["--data", str(bundle), "--storage-profile", "legacy", "--fixed-common-gp-var"])

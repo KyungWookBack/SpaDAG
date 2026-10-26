@@ -5,9 +5,7 @@ import pytest
 
 pytest.importorskip("arviz")
 
-from spadag.diagnostics import diagnose, scalar_diagnostic, _direction_trace
-from spadag.compact_runner import read_checkpoint
-from spadag.compact_storage import load_stream
+from spadag.diagnostics import diagnose, scalar_diagnostic
 from spadag.mcmc_data import load_inference_data
 from tests.test_compact_storage import args_for, run
 from tests.toy_data_fixture import temporary_toy_bundle
