@@ -112,7 +112,8 @@ spadag-evaluate \
 
 This reports TPR, FDR and F1 of the edges with posterior probability at least
 0.5 against the true triangle graphs, and the recovery of the reversal motifs
-listed in `metadata.json`.
+listed in `metadata.json`. With two retained sweeps these summaries only show
+that the pipeline runs; a chain for inference uses the default protocol below.
 
 ### Default protocol
 
