@@ -7,20 +7,13 @@ every triangle of a mesh over the domain.
 SpaDAG is the method proposed in *Bayesian Spatially Heterogeneous Causal
 Discovery for Spatial Omics Data*. It infers the presence and orientation of
 each causal edge among p variables at every location of a two-dimensional
-domain. Local graphs and structural-coefficient
-surfaces are represented on a common triangulation of the domain; each local
-graph is acyclic, but no topological ordering is shared across the domain, so
-opposite orientations of a pair can be supported in different regions. A
-spatial inclusion prior models the inclusion propensity of each candidate
-direction as a spatial field with a component shared by all directions and a
-direction-specific component, both represented by truncated Karhunen–Loève
-expansions, so that information about edge presence is shared across nearby
-locations while each edge keeps its own region of support. The posterior
-sampler includes a component-reversal move that reverses an edge jointly over a
-connected region of support in a single step, and draws the Pólya–Gamma
-variables of the inclusion update exactly through the R package `BayesLogit`.
-Triangle-level posterior inclusion probabilities summarize the support for each
-direction at each location.
+domain. Local graphs live on a triangulation of the domain; each is acyclic,
+but no ordering is shared across the domain, so a pair can point one way in
+one region and the other way elsewhere. A spatial inclusion prior shares
+information about each edge across nearby locations, a component-reversal
+move lets the sampler flip an edge over a whole region in one step, and
+triangle-level posterior inclusion probabilities summarize the support for
+each direction.
 
 ![Overview of SpaDAG](docs/figure1_overview.png)
 
@@ -106,19 +99,6 @@ probability of each directed edge in each triangle, `edge_prob[t, j, k]` for
 the edge k → j. `gamma_prob` has shape `(p, p, H)` and holds the nodal
 indicator probabilities. `kept` is the number of retained post-burn-in sweeps
 behind these summaries: two here, because sweeps 11 to 20 are thinned by five.
-The ten triangle–edge pairs with the highest posterior probability are listed
-by
-
-```bash
-python - <<'EOF'
-import numpy as np
-r = np.load("runs/smoke/trace/summary.npz", allow_pickle=False)
-prob = r["edge_prob"]
-t, j, k = np.unravel_index(np.argsort(prob, axis=None)[::-1][:10], prob.shape)
-for row in zip(t, k, j, prob[t, j, k]):
-    print("triangle %d: %d -> %d  PIP %.3f" % row)
-EOF
-```
 
 Because the example comes with simulation truth, recovery can be scored:
 
@@ -160,19 +140,9 @@ hyperparameters (`--v0`, `--a-b`, `--b-b`, `--a-tau`, `--b-tau`,
 `--common-gp-var-prior`, `--mu-prior-mean`, `--mu-prior-sd`) and the trace
 thinning intervals are listed by `spadag --help`.
 
-A chain is extended by resuming its checkpoint with a larger `--iters`. The
-other options, including `--seed`, must repeat those of the original run, since
-the checkpoint records them and a different setting is refused:
-
-```bash
-spadag \
-  --data artifacts/data/example_reversal_p50_n500 \
-  --trace-dir runs/chain1/trace \
-  --checkpoint runs/chain1/checkpoint.pkl \
-  --resume runs/chain1/checkpoint.pkl \
-  --seed 1 \
-  --iters 60000
-```
+To extend a chain, pass its checkpoint to both `--checkpoint` and `--resume`
+with a larger `--iters` and every other setting, including `--seed`, unchanged;
+the checkpoint records the settings and refuses a different one.
 
 The trace directory stores online triangle PIP and coefficient moments, small
 diagnostic streams and packed indicator states; retained draws are written to
@@ -193,20 +163,16 @@ this working model.
 
 ### Multi-chain diagnostics
 
-Run two or more chains with distinct seeds on the same bundle, then
+Run `spadag-diagnose` on two or more chain trace directories with distinct
+seeds to compute rank-normalized split R-hat, bulk/tail ESS and between-chain
+differences in edge probabilities; `--truth` (the same directory as for
+`spadag-evaluate`) is optional:
 
 ```bash
 spadag-diagnose runs/chain1/trace runs/chain2/trace \
   --truth artifacts/data/example_reversal_p50_n500 \
   --out runs/diagnostics.json
 ```
-
-This computes rank-normalized split R-hat and bulk/tail ESS of the scalar
-traces with ArviZ, and reports between-chain differences of the edge
-probabilities. `--truth` is optional. Both
-`spadag-evaluate` and `spadag-diagnose` take `--truth` as the directory that
-holds `edge_triangle.npy`; `spadag-diagnose` also accepts the `.npy` file
-itself.
 
 ## Use your own observations and locations
 
@@ -307,11 +273,9 @@ spadag-prepare --x runs/P25_N500_S1_rep001/bundle/X.npy --locations runs/P25_N50
   --outdir runs/P25_N500_S1_rep001/inference --mesh-type regular --domain 0 1 0 1
 ```
 
-The `p = 50` cells share one set of `n = 1000` observations, and the `n = 500`
-and `n = 250` datasets are re-standardized prefixes of it, which is why the
-example bundle's `metadata.json` lists two generator commands. The background
-patch sizes, coverage window and target edge density can be changed from the
-command line; see `spadag-generate-reversal --help`.
+For `p = 50`, the `n = 500` and `n = 250` datasets are re-standardized
+prefixes of the corresponding `n = 1000` dataset, which is why the example
+bundle's `metadata.json` lists two generator commands.
 
 Recovery on an inference mesh that differs from the generating mesh is
 evaluated with `spadag-evaluate --eval-points sobol|observed|both`, which pools
@@ -340,14 +304,12 @@ created or obtained from a trusted source.
 
 Exact continuation from a checkpoint and byte-for-byte regeneration of the
 cohort arrays are tested with Python 3.13.9, NumPy 2.5.4, SciPy 1.18.1,
-R 4.5.2, `BayesLogit` 2.4 and `BayesGPfit` 1.1.0. A checkpoint records the
-Python, NumPy and SciPy versions and the SHA-256 of the sampler modules, and
-resuming it under different versions is refused. NumPy's random streams can
-change between feature releases, so the generator's output for a given seed
-is tied to the NumPy version. The sampler does not set the number of BLAS
-threads; the manuscript's chains ran with one thread, and a run is repeated
-bit for bit only with the same thread count, for example
-`OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1`.
+R 4.5.2, `BayesLogit` 2.4 and `BayesGPfit` 1.1.0. Bit-for-bit reproducibility
+requires matching software versions and BLAS thread counts; the manuscript's
+chains used one thread (`OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+MKL_NUM_THREADS=1`). A checkpoint records the Python, NumPy and SciPy versions
+and the SHA-256 of the sampler modules, and resuming it under different
+versions is refused.
 
 The R packages are external system dependencies and are not installed by the
 wheel. The tests run with
