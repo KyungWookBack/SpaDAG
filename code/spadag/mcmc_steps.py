@@ -55,8 +55,15 @@ class SamplerState:
     sigma2: np.ndarray            # (p,) noise variances
     theta: np.ndarray             # (p, p, L) K-L coefficients
     m: np.ndarray                 # (p, p, H) working inclusion-prob mean
-    # node -> incident triangles, used by the local-DAG checks
-    _node_tris: list = field(default=None, repr=False)
+    # Derived quantities kept with the state: node -> incident triangles for
+    # the local-DAG checks; the residual sums of squares and the working log
+    # likelihood after the last coefficient update, read by the trace writers;
+    # and the component-reversal events of the last sweep.
+    node_tris: list | None = field(default=None, repr=False)
+    rss: np.ndarray | None = field(default=None, repr=False)
+    log_likelihood: float | None = field(default=None, repr=False)
+    component_events: list = field(default_factory=list, repr=False)
+    component_accepted: int = 0
 
 
 def init_state(
@@ -108,15 +115,15 @@ def init_state(
         tau_alpha=np.ones(p), sigma2=data.X.var(axis=0).astype(float),
         theta=theta, m=m,
     )
-    st._node_tris = node_tris
+    st.node_tris = node_tris
     return st
 
 
-def _alpha_at_obs(data: InferenceData, st: SamplerState, j: int) -> np.ndarray:
+def alpha_at_obs(data: InferenceData, st: SamplerState, j: int) -> np.ndarray:
     return st.a0[j] + data.Phi @ st.a_spatial[j]
 
 
-def _parent_pred(data: InferenceData, st: SamplerState, j: int, exclude_k: int | None = None) -> np.ndarray:
+def parent_pred(data: InferenceData, st: SamplerState, j: int, exclude_k: int | None = None) -> np.ndarray:
     """Sum_{k in pa(j), k != exclude_k} Zk[k] @ b[j,k]."""
     pred = np.zeros(data.n)
     for k in np.where(data.parents[j] == 1)[0]:
@@ -149,8 +156,8 @@ def update_gamma(data: InferenceData, st: SamplerState, cfg: SamplerConfig,
     log2pi = np.log(2.0 * np.pi)
     sb2 = st.sigma_b2
     spike_var = cfg.v0
-    if getattr(st, "_node_tris", None) is None:
-        st._node_tris = node_triangles(data.triangles, data.H)
+    if st.node_tris is None:
+        st.node_tris = node_triangles(data.triangles, data.H)
     edge = triangle_edge_tensor(st.gamma, data.triangles)
     for (j, k) in data.pairs:
         bvec = st.b[j, k]
@@ -166,7 +173,7 @@ def update_gamma(data: InferenceData, st: SamplerState, cfg: SamplerConfig,
             if new_val == old_val:
                 continue
 
-            tris_hi = st._node_tris[hi]
+            tris_hi = st.node_tris[hi]
             if new_val == 1:
                 if any(creates_cycle(edge[K], j, k) for K in tris_hi):
                     continue
@@ -184,7 +191,7 @@ def update_b(data: InferenceData, st: SamplerState, cfg: SamplerConfig,
              rng: np.random.Generator) -> None:
     """Draw the coefficient surface of each candidate parent, one pair at a time."""
     for j in range(data.p):
-        alpha_j = _alpha_at_obs(data, st, j)
+        alpha_j = alpha_at_obs(data, st, j)
         s2 = st.sigma2[j]
         parents = np.where(data.parents[j] == 1)[0]
         if parents.size == 0:
@@ -236,7 +243,7 @@ def update_alpha(data: InferenceData, st: SamplerState, cfg: SamplerConfig,
     prior_prec = np.empty(data.H)
     prior_prec[0] = 1.0 / cfg.sigma_a0_2
     for j in range(data.p):
-        r = data.X[:, j] - _parent_pred(data, st, j)
+        r = data.X[:, j] - parent_pred(data, st, j)
         prior_prec[1:] = st.tau_alpha[j]
         s2 = st.sigma2[j]
         Lambda = data.UtU / s2 + np.diag(prior_prec)
@@ -255,7 +262,7 @@ def update_sigma2(data: InferenceData, st: SamplerState, cfg: SamplerConfig,
     log_likelihood = 0.0
     rss = np.empty(data.p, dtype=float)
     for j in range(data.p):
-        e = data.X[:, j] - _alpha_at_obs(data, st, j) - _parent_pred(data, st, j)
+        e = data.X[:, j] - alpha_at_obs(data, st, j) - parent_pred(data, st, j)
         shape = cfg.a_sig + 0.5 * data.n
         scale = cfg.b_sig + 0.5 * float(np.sum(e**2))
         st.sigma2[j] = float(1.0 / rng.gamma(shape=shape, scale=1.0 / scale))
@@ -266,5 +273,16 @@ def update_sigma2(data: InferenceData, st: SamplerState, cfg: SamplerConfig,
             + float(e @ e) / variance
         )
     # Cached for the trace writers, which would otherwise recompute residuals.
-    st._log_likelihood = float(log_likelihood)
-    st._rss = rss
+    st.log_likelihood = float(log_likelihood)
+    st.rss = rss
+
+
+def refresh_residual_cache(data: InferenceData, st: SamplerState) -> None:
+    """Recompute ``st.rss`` and ``st.log_likelihood`` after coefficients changed
+    outside ``update_sigma2``; no random numbers are consumed."""
+    st.rss = np.array([
+        np.sum((data.X[:, j] - alpha_at_obs(data, st, j)
+                - parent_pred(data, st, j))**2) for j in range(data.p)
+    ])
+    st.log_likelihood = float(-0.5 * np.sum(
+        data.n * np.log(2 * np.pi * st.sigma2) + st.rss / st.sigma2))

@@ -8,11 +8,10 @@ import numpy as np
 from spadag.mesh.core import (
     Mesh,
     assert_no_degenerate_triangles,
-    build_polygon_data_adaptive_mesh,
     build_unit_square_data_adaptive_mesh,
     build_unit_square_regular_triangulation,
-    validate_polygon_mesh,
 )
+from spadag.mesh.polygon import build_polygon_data_adaptive_mesh, validate_polygon_mesh
 
 
 MESH_OPTIONS = ("polygon", "regular", "cdt")

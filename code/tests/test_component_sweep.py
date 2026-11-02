@@ -7,7 +7,7 @@ import numpy as np
 from spadag.cli import DEFAULT_M_REV, _checkpoint_signature, _resolved_m_rev, parse_args, sweep_shared_gp_pg
 from spadag.component_reversal import MeshComponents, attempt_component_reversal
 from spadag.mcmc_data import load_inference_data
-from spadag.mcmc_steps import SamplerConfig, init_state, _alpha_at_obs, _parent_pred, update_sigma_b2
+from spadag.mcmc_steps import SamplerConfig, init_state, alpha_at_obs, parent_pred, update_sigma_b2
 from spadag.shared_gp_pg import build_gp_decomposition, init_shared_gp_state
 from tests.toy_data_fixture import temporary_toy_bundle
 
@@ -31,15 +31,15 @@ def test_composed_sweep_matches_five_explicit_attempts():
             composed = sweep_shared_gp_pg(data, other, other_shared, cfg, other_rng, omega,
                                          **kwargs, m_rev=5, component_mesh=mesh)
             assert ordinary[1:] == composed[1:]
-            assert events == other._component_events
+            assert events == other.component_events
             for name in ('b', 'gamma', 'sigma2', 'sigma_b2', 'theta', 'a0', 'a_spatial', 'pi'):
                 np.testing.assert_array_equal(getattr(st, name), getattr(other, name))
             assert rng.bit_generator.state == other_rng.bit_generator.state
-            rss = np.array([np.sum((data.X[:, j] - _alpha_at_obs(data, other, j)
-                                  - _parent_pred(data, other, j))**2) for j in range(data.p)])
-            np.testing.assert_allclose(other._rss, rss)
+            rss = np.array([np.sum((data.X[:, j] - alpha_at_obs(data, other, j)
+                                  - parent_pred(data, other, j))**2) for j in range(data.p)])
+            np.testing.assert_allclose(other.rss, rss)
             expected = -.5 * np.sum(data.n * np.log(2*np.pi*other.sigma2) + rss / other.sigma2)
-            assert other._log_likelihood == expected
+            assert other.log_likelihood == expected
             kwargs.update(edge_gp_var=ordinary[1], common_gp_var=ordinary[2])
 
 

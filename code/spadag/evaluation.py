@@ -87,8 +87,12 @@ def evaluate_triangle_recovery(
     edge_true: np.ndarray,
     *,
     reversal_motifs: list[dict[str, object]] | None = None,
+    threshold: float = 0.5,
 ) -> dict[str, object]:
-    """Evaluate the triangle-level graph target against simulation truth."""
+    """Evaluate the triangle-level graph target against simulation truth.
+
+    Edges with posterior probability at least ``threshold`` are selected.
+    """
     required = ("edge_prob",)
     missing = [name for name in required if name not in result]
     if missing:
@@ -97,14 +101,14 @@ def evaluate_triangle_recovery(
     edge_prob = np.asarray(result["edge_prob"], dtype=float)
     summary: dict[str, object] = {
         "triangle_recovery": triangle_edge_recovery(
-            edge_prob, edge_true, thresh=0.5
+            edge_prob, edge_true, thresh=threshold
         ),
     }
     if reversal_motifs:
         summary["reversal_recovery"] = evaluate_reversal_recovery(
             edge_prob,
             reversal_motifs,
-            threshold=0.5,
+            threshold=threshold,
         )
     return summary
 
@@ -140,7 +144,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     )
     parser.add_argument("--sobol-m", type=int, default=SOBOL_DEFAULT_M, help="2**m Sobol points")
     parser.add_argument("--sobol-seed", type=int, default=SOBOL_DEFAULT_SEED)
-    parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--threshold", type=float, default=0.5,
+                        help="posterior probability at or above which an edge is selected (default 0.5)")
     return parser.parse_args(argv)
 
 
@@ -215,6 +220,7 @@ def main() -> None:
             result,
             edge_true,
             reversal_motifs=reversal_motifs,
+            threshold=args.threshold,
         )
     else:
         kinds = EVALUATION_KINDS if args.eval_points == "both" else (args.eval_points,)

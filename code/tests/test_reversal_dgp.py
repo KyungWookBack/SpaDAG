@@ -28,7 +28,6 @@ from spadag.sim.reversal_dgp import (
     draw_coefficients,
     draw_partitioned_graph,
     reversal_motifs_for_evaluation,
-    smoothness_config,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -109,24 +108,6 @@ def test_coefficients_share_sign_and_lie_in_uniform_support() -> None:
         signs = np.sign(b[j, k, gamma[j, k].astype(bool)])
         assert np.unique(signs).size == 1
     assert np.array_equal(b, draw_coefficients(mesh.points, mesh.triangles, gamma, edge, 12))
-
-
-@pytest.mark.parametrize("level,sizes", [("rough", {1}), ("smooth", {7, 8, 9})])
-def test_smoothness_levels_change_only_patch_geometry(level: str, sizes: set[int]) -> None:
-    mesh = build_regular_mesh(5)
-    p = 25
-    medium = cohort_config(p)
-    config = smoothness_config(level, p)
-    assert config.target_mean_edges == medium.target_mean_edges == .65 * p
-    gamma, edge, report = draw_partitioned_graph(mesh.points, mesh.triangles, 3, config)
-    _, _, medium_report = draw_partitioned_graph(mesh.points, mesh.triangles, 3, medium)
-    assert report["target_reached"]
-    assert report["label_permutation"] == medium_report["label_permutation"]
-    assert report["reversal_motifs"] == medium_report["reversal_motifs"]
-    assert {len(patch["vertices"]) for patch in report["accepted_background_patches"]} <= sizes
-    assert smoothness_config("medium", p).patch_sizes == medium.patch_sizes
-    with pytest.raises(ValueError):
-        smoothness_config("flat", p)
 
 
 def test_generator_rejects_unsupported_dimension_and_mesh() -> None:

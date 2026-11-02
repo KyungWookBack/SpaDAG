@@ -6,8 +6,8 @@ import pytest
 
 from spadag.mesh.basis import basis_matrix, observation_support
 from spadag.mesh.builders import MESH_OPTIONS, build_mesh, build_polygon_mesh
-from spadag.mesh.core import (
-    Mesh,
+from spadag.mesh.core import Mesh
+from spadag.mesh.polygon import (
     _containing_triangle,
     distance_to_boundary,
     estimate_observation_domain,

@@ -21,7 +21,7 @@ import scipy
 from .acyclic import all_triangle_dags, triangle_edge_tensor
 from .compact_storage import (ChunkWriter, Moments, atomic_json, atomic_npz,
                               chunk_links, digest, triangle_coefficients)
-from .mcmc_steps import _alpha_at_obs, _parent_pred
+from .mcmc_steps import alpha_at_obs, parent_pred
 
 
 FORMAT = "spadag-compact-1"
@@ -226,7 +226,7 @@ def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature, stop_exce
         )
         completed = i + 1
         if args.m_rev:
-            events = st._component_events
+            events = st.component_events
             add("component", completed,
                 accepted=np.array([e["accepted"] for e in events], dtype=np.uint8),
                 size=np.array([e["size"] for e in events], dtype=np.int64),
@@ -244,7 +244,7 @@ def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature, stop_exce
         for key, value in errors.items():
             integrity[key] = max(integrity[key], value)
         finite = all(np.all(np.isfinite(x)) for x in (st.b, st.theta, st.sigma2, st.a0,
-                     st.a_spatial, st.tau_alpha, st.pi, st._rss, st._log_likelihood,
+                     st.a_spatial, st.tau_alpha, st.pi, st.rss, st.log_likelihood,
                      shared.theta0, shared.mu, st.sigma_b2, edge_var, common_var))
         finite = finite and all(np.all(np.asarray(x) > 0) for x in (st.sigma2, st.tau_alpha, st.sigma_b2, edge_var, common_var))
         bad = not finite or any(v > 1e-8 or not np.isfinite(v) for v in errors.values())
@@ -280,8 +280,8 @@ def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature, stop_exce
         xi0 = shared.decomposition.common_basis.T @ shared.theta0
         if due(i, args.scalar_thin, acc["origin"]):
             values = np.concatenate(([shared.mu, st.sigma_b2, edge_var, common_var,
-                                      st.gamma.sum(), st._log_likelihood], st.sigma2,
-                                     st._rss, st.a0, st.tau_alpha, xi0))
+                                      st.gamma.sum(), st.log_likelihood], st.sigma2,
+                                     st.rss, st.a0, st.tau_alpha, xi0))
             add("scalar", completed, values=values, postburn=i >= origin)
         if due(i, args.gamma_trace_thin, origin):
             add("gamma", completed, packed=np.packbits(st.gamma[pair_j, pair_k].astype(np.uint8).ravel(), bitorder="little"))
@@ -299,7 +299,7 @@ def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature, stop_exce
             values = []
             for target in targets["residuals"]:
                 j, ids = target["child"], target["observations"]
-                residual = data.X[:, j] - _alpha_at_obs(data, st, j) - _parent_pred(data, st, j)
+                residual = data.X[:, j] - alpha_at_obs(data, st, j) - parent_pred(data, st, j)
                 values.append(np.mean(residual[ids]**2))
             add("residual", completed, mse=values)
         if due(i, args.b_trace_thin, origin):
@@ -316,7 +316,7 @@ def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature, stop_exce
             writer.flush()
             resources()
         if args.log_every and completed % args.log_every == 0:
-            print(f"[compact] iteration={completed} kept={acc['kept']} logL={st._log_likelihood:.3f}", flush=True)
+            print(f"[compact] iteration={completed} kept={acc['kept']} logL={st.log_likelihood:.3f}", flush=True)
         stopping = args.stop_after is not None and completed == args.stop_after
         if (stopping or completed == args.iters or (args.checkpoint_every and completed % args.checkpoint_every == 0)
                 or (args.milestone_every and completed % args.milestone_every == 0)):
@@ -340,7 +340,7 @@ def run_compact(data, args, *, st, cfg, shared, rng, sweep, signature, stop_exce
               "partial_block_start": origin + acc["block_id"] * args.block_iterations + 1,
               "completed_iterations": args.iters, "seed": args.seed, "burn": args.burn,
               "thin": args.thin, "initialization": args.initialization,
-              "m_rev": args.m_rev, "reversal_moves": int(getattr(st, "_component_accepted", 0)),
+              "m_rev": args.m_rev, "reversal_moves": int(st.component_accepted),
               "data_fingerprint": data.data_fingerprint, "time": elapsed_before + time.perf_counter() - clock}
     for name in ("b", "signed", "rms"):
         result[f"{name}_candidate_mean"] = acc[name].mean

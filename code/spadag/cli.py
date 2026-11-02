@@ -16,9 +16,11 @@ import numpy as np
 from spadag.compact_runner import run_compact
 from spadag.compact_storage import writer_lock
 from spadag.mcmc_data import InferenceData, load_inference_data
+from spadag.component_reversal import MeshComponents, attempt_component_reversal
 from spadag.mcmc_steps import (
     SamplerConfig,
     init_state,
+    refresh_residual_cache,
     update_alpha,
     update_b,
     update_gamma,
@@ -124,22 +126,14 @@ def sweep_shared_gp_pg(
         shared, rng, prior_shape=a_sigma0, prior_scale=b_sigma0,
     )
     if m_rev:
-        from spadag.component_reversal import MeshComponents, attempt_component_reversal
-        from spadag.mcmc_steps import _alpha_at_obs, _parent_pred
         mesh = component_mesh if component_mesh is not None else MeshComponents(data)
-        st._component_events = [
+        st.component_events = [
             attempt_component_reversal(data, st, cfg, rng, mesh) for _ in range(m_rev)
         ]
-        st._component_accepted = getattr(st, "_component_accepted", 0) + sum(
-            event["accepted"] for event in st._component_events)
-        # The reversal redraws coefficients, so refresh the cached residuals
-        # and likelihood; no random numbers are consumed.
-        st._rss = np.array([
-            np.sum((data.X[:, j] - _alpha_at_obs(data, st, j)
-                    - _parent_pred(data, st, j))**2) for j in range(data.p)
-        ])
-        st._log_likelihood = float(-0.5 * np.sum(
-            data.n * np.log(2 * np.pi * st.sigma2) + st._rss / st.sigma2))
+        st.component_accepted += sum(event["accepted"] for event in st.component_events)
+        # The reversal redraws coefficients, so the cached residuals and
+        # likelihood are refreshed; no random numbers are consumed.
+        refresh_residual_cache(data, st)
     return pg_stats, edge_gp_var, common_gp_var
 
 

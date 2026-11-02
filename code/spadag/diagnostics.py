@@ -279,11 +279,28 @@ def report_markdown(report):
     return "\n".join(rows)
 
 
+def load_truth(truth_path, motifs_path):
+    """Return (edge_triangle, motifs) from a truth directory or an edge_triangle .npy file."""
+    if truth_path is None:
+        truth = None
+    elif truth_path.is_dir():
+        truth = np.load(truth_path / "edge_triangle.npy", allow_pickle=False)
+        metadata = truth_path / "metadata.json"
+        if motifs_path is None and metadata.is_file():
+            return truth, json.loads(metadata.read_text(encoding="utf-8")).get("reversal_motifs")
+    else:
+        truth = np.load(truth_path, allow_pickle=False)
+    motifs = json.loads(motifs_path.read_text(encoding="utf-8")) if motifs_path else None
+    return truth, motifs
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("chains", nargs="+", type=Path)
-    parser.add_argument("--truth", type=Path, help="explicit triangle-edge truth .npy; never read during fitting")
-    parser.add_argument("--motifs", type=Path, help="JSON list of reversal motifs")
+    parser.add_argument("--truth", type=Path,
+                        help="simulation truth: a directory containing edge_triangle.npy (and optionally "
+                             "metadata.json with reversal_motifs), or the .npy file itself; never read during fitting")
+    parser.add_argument("--motifs", type=Path, help="JSON list of reversal motifs (default: metadata.json of --truth)")
     parser.add_argument("--child", type=int)
     parser.add_argument("--top", type=int, default=20)
     parser.add_argument("--recent-iterations", type=int)
@@ -291,8 +308,8 @@ def main():
     args = parser.parse_args()
     if args.top < 0 or (args.recent_iterations is not None and args.recent_iterations <= 0):
         parser.error("--top must be nonnegative; --recent-iterations must be positive")
-    report = diagnose(args.chains, truth=np.load(args.truth, allow_pickle=False) if args.truth else None,
-                      motifs=json.loads(args.motifs.read_text(encoding="utf-8")) if args.motifs else None,
+    truth, motifs = load_truth(args.truth, args.motifs)
+    report = diagnose(args.chains, truth=truth, motifs=motifs,
                       top=args.top, child=args.child, recent_iterations=args.recent_iterations)
     atomic_json(args.out, report)
     args.out.with_suffix(".md").write_text(report_markdown(report), encoding="utf-8")

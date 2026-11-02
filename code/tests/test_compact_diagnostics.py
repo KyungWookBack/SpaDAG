@@ -48,3 +48,28 @@ def test_report_chain_identity_noise_and_recovery(tmp_path):
             diagnose([directories[0], directories[0]])
         recent = diagnose(directories, top=0, recent_iterations=10)
         assert recent["scalar_aligned_draws_per_chain"] == 5
+
+
+def test_load_truth_accepts_directory_or_file(tmp_path):
+    from spadag.diagnostics import load_truth
+
+    truth = np.zeros((2, 3, 3), dtype=int)
+    truth[0, 1, 0] = 1
+    np.save(tmp_path / "edge_triangle.npy", truth)
+    motifs = [{"name": "R1", "nodes": {"a": 0, "b": 1, "c": 2},
+               "left": {"parent": 0, "child": 1, "triangles": [0]},
+               "right": {"parent": 1, "child": 0, "triangles": [1]}}]
+    (tmp_path / "metadata.json").write_text(json.dumps({"reversal_motifs": motifs}), encoding="utf-8")
+
+    loaded, loaded_motifs = load_truth(tmp_path, None)
+    np.testing.assert_array_equal(loaded, truth)
+    assert loaded_motifs == motifs
+
+    loaded, loaded_motifs = load_truth(tmp_path / "edge_triangle.npy", None)
+    np.testing.assert_array_equal(loaded, truth)
+    assert loaded_motifs is None
+
+    explicit = tmp_path / "motifs.json"
+    explicit.write_text(json.dumps([]), encoding="utf-8")
+    assert load_truth(tmp_path, explicit) == (pytest.approx(truth), [])
+    assert load_truth(None, None) == (None, None)

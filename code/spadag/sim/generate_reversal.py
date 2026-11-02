@@ -1,7 +1,7 @@
 """Generate regional-reversal simulation bundles.
 
 ``spadag-generate-reversal`` implements the data-generating mechanism of the
-manuscript's simulation studies (Section 4): the regional-reversal graph field
+manuscript's simulation studies: the regional-reversal graph field
 and ``Uniform(0.5, 1.5)`` coefficients of :mod:`spadag.sim.reversal_dgp`, one
 global coefficient multiplier calibrated so that the median population
 child--triangle SNR equals the target, iid uniform observation locations on
@@ -45,12 +45,10 @@ from spadag.mesh.basis import basis_matrix
 from spadag.mesh.builders import build_regular_mesh
 from spadag.sim.reversal_dgp import (
     PartitionConfig,
-    SMOOTHNESS_LEVELS,
     cohort_config,
     draw_coefficients,
     draw_partitioned_graph,
     reversal_motifs_for_evaluation,
-    smoothness_config,
 )
 
 COHORT_MASTER = 2026092301
@@ -397,10 +395,6 @@ def verify_bundle(bundle: Path, target_snr: float = 1.0) -> dict:
 
 
 def _config_from_args(args: argparse.Namespace, p: int) -> PartitionConfig:
-    if args.level is not None:
-        if args.level == "cohort":
-            return cohort_config(p)
-        return smoothness_config(args.level, p)
     base = cohort_config(p)
     overrides = {}
     if args.patch_sizes is not None:
@@ -436,8 +430,6 @@ def parse_args(argv=None) -> argparse.Namespace:
     design.add_argument("--prefix-of", type=Path,
                         help="derive OUT as the re-standardized first --n observations of this completed output")
     graph = parser.add_argument_group("graph field")
-    graph.add_argument("--level", choices=("cohort",) + SMOOTHNESS_LEVELS,
-                       help="preset background-patch configuration (default: cohort)")
     graph.add_argument("--patch-sizes", type=int, nargs="+")
     graph.add_argument("--patch-probabilities", type=float, nargs="+")
     graph.add_argument("--coverage", type=float, nargs=2, metavar=("MIN", "MAX"))

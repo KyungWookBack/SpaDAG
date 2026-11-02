@@ -41,7 +41,7 @@ def _one_coordinate_state():
         b=np.zeros((2, 2, 1)),
         pi=np.full((2, 2, 1), 0.5),
         sigma_b2=2.0,
-        _node_tris=None,
+        node_tris=None,
     )
     return data, state
 

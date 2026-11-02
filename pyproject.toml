@@ -7,7 +7,7 @@ name = "spadag"
 version = "0.1.0"
 description = "Spatially varying directed acyclic graph inference"
 authors = [
-  { name = "Kyung Wook Back", email = "benforgem@gmail.com" },
+  { name = "Kyung Wook Back", email = "bkw02@korea.ac.kr" },
 ]
 license = "MIT"
 license-files = ["LICENSE"]
@@ -23,11 +23,6 @@ diagnostics = [
   "psutil>=5.9",
 ]
 prepare = [
-  "matplotlib>=3.7",
-  "contourpy>=1.0",
-  "triangle>=20230923",
-]
-generator = [
   "matplotlib>=3.7",
   "contourpy>=1.0",
   "triangle>=20230923",

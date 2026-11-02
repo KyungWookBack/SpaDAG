@@ -8,8 +8,8 @@ import numpy as np
 from spadag.mcmc_data import load_inference_data
 from spadag.mcmc_steps import (
     SamplerConfig,
-    _alpha_at_obs,
-    _parent_pred,
+    alpha_at_obs,
+    parent_pred,
     _sample_gaussian_precision,
     init_state,
     spike_slab_variances,
@@ -21,13 +21,13 @@ from tests.toy_data_fixture import temporary_toy_bundle
 def _update_b_reference(data, st, cfg, rng) -> None:
     """Uncached update used as a transition-equivalence test oracle."""
     for j in range(data.p):
-        alpha_j = _alpha_at_obs(data, st, j)
+        alpha_j = alpha_at_obs(data, st, j)
         s2 = st.sigma2[j]
         for k in np.where(data.parents[j] == 1)[0]:
             r = (
                 data.X[:, j]
                 - alpha_j
-                - _parent_pred(data, st, j, exclude_k=k)
+                - parent_pred(data, st, j, exclude_k=k)
             )
             v = spike_slab_variances(
                 st.gamma[j, k], st.sigma_b2, cfg

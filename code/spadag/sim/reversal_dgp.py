@@ -3,7 +3,7 @@
 A given ``seed`` reproduces the graphs and coefficients of the manuscript's
 simulation cohort exactly, so the random-number call order must not change.
 
-Design (manuscript Section 4.1):
+Design:
 
 * Variable labels are permuted at random.  The left ordering is the permuted
   order; the right ordering swaps positions ``(2,3), (4,5), (6,7), (8,9)`` in
@@ -53,31 +53,9 @@ class PartitionConfig:
     compactness_scale: float = .04
 
 
-SMOOTHNESS_LEVELS = ("rough", "medium", "smooth")
-
-
 def cohort_config(p: int) -> PartitionConfig:
     """Main-experiment configuration: patch sizes 2-4, density ``0.65 p``."""
     return PartitionConfig(p=p, target_mean_edges=.65 * p)
-
-
-def smoothness_config(level: str, p: int) -> PartitionConfig:
-    """Graph-smoothness settings of manuscript Section 4.2.
-
-    ``medium`` is the main-experiment configuration.  ``rough`` uses single
-    vertices and ``smooth`` uses seven to nine vertices per background patch.
-    All three levels use an attempt budget of 60000.
-    """
-    base = dict(p=p, target_mean_edges=.65 * p, max_attempts=60000)
-    if level == "rough":
-        return PartitionConfig(patch_sizes=(1,), patch_probabilities=(1.,),
-                               coverage_min=0., coverage_max=.36, **base)
-    if level == "medium":
-        return PartitionConfig(**base)
-    if level == "smooth":
-        return PartitionConfig(patch_sizes=(7, 8, 9), patch_probabilities=(1 / 3, 1 / 3, 1 / 3),
-                               coverage_min=.08, coverage_max=.7, **base)
-    raise ValueError(f"unknown smoothness level {level!r}; choose from {SMOOTHNESS_LEVELS}")
 
 
 def mesh_geometry(points, triangles):

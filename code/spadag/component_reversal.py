@@ -15,7 +15,7 @@ import numpy as np
 from scipy.linalg import cho_factor, cho_solve, solve_triangular
 
 from spadag.acyclic import is_dag, node_triangles
-from spadag.mcmc_steps import _alpha_at_obs, _parent_pred, spike_slab_variances
+from spadag.mcmc_steps import alpha_at_obs, parent_pred, spike_slab_variances
 
 
 @dataclass
@@ -113,8 +113,8 @@ def score_pair(data, state, config, proposal):
     current, proposed = [], []
     delta_prior = 0.0
     for child, parent, new_bit in ((j, k, 0), (k, j, 1)):
-        residual = (data.X[:, child] - _alpha_at_obs(data, state, child)
-                    - _parent_pred(data, state, child, exclude_k=parent))
+        residual = (data.X[:, child] - alpha_at_obs(data, state, child)
+                    - parent_pred(data, state, child, exclude_k=parent))
         gram = data.ZtZ[parent] / state.sigma2[child]
         rhs = data.Zk[parent].T @ residual / state.sigma2[child]
         old_gamma = state.gamma[child, parent]
@@ -159,7 +159,7 @@ def attempt_component_reversal(data, state, config, rng, mesh):
     if proposal.reason != "valid":
         blocks = []
         for child, parent in ((j, k), (k, j)):
-            residual = data.X[:, child] - _alpha_at_obs(data, state, child) - _parent_pred(data, state, child, exclude_k=parent)
+            residual = data.X[:, child] - alpha_at_obs(data, state, child) - parent_pred(data, state, child, exclude_k=parent)
             blocks.append(gaussian_block(data.ZtZ[parent] / state.sigma2[child],
                           data.Zk[parent].T @ residual / state.sigma2[child],
                           spike_slab_variances(state.gamma[child, parent], state.sigma_b2, config)))
@@ -178,8 +178,7 @@ def attempt_component_reversal(data, state, config, rng, mesh):
     for (child, parent), block in zip(((j, k), (k, j)), blocks):
         state.b[child, parent] = _draw(block, rng)
     result["coefficient_blocks"] = 2
-    # b changed outside the regular sweep, so cached RSS and log likelihood are stale.
-    for name in ("_rss", "_log_likelihood"):
-        if hasattr(state, name):
-            delattr(state, name)
+    # b changed outside the regular sweep, so the cached RSS and log likelihood are stale.
+    state.rss = None
+    state.log_likelihood = None
     return result

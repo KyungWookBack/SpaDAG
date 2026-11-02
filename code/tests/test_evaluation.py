@@ -25,6 +25,10 @@ def test_evaluate_triangle_recovery() -> None:
     assert set(summary) == {"triangle_recovery"}
     assert summary["triangle_recovery"]["f1"] == 1.0
 
+    strict = evaluate_triangle_recovery(result, edge_true, threshold=0.95)
+    assert strict["triangle_recovery"]["tp"] == 0
+    assert strict["triangle_recovery"]["fn"] == 1
+
 
 def test_reversal_recovery_requires_both_correct_regional_directions() -> None:
     edge_prob = np.zeros((3, 4, 4), dtype=float)

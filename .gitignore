@@ -46,3 +46,6 @@ Thumbs.db
 !/artifacts/data/reversal_cohort_seeds.json
 !/artifacts/data/example_reversal_p50_n500/
 !/artifacts/data/example_reversal_p50_n500/*.npy
+
+# Local run output (the README examples write here)
+/runs/
