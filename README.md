@@ -179,6 +179,18 @@ diagnostic streams and packed indicator states; retained draws are written to
 append-only chunk files linked by SHA-256, so the checkpoint holds no draw
 history. The trace directory and the checkpoint must be moved together.
 
+### Working model of the sampler
+
+The structural model of the manuscript places a point mass at zero on
+inactive coefficients, and its identifiability result (Theorem 1) concerns
+that population model. To keep the coefficient updates Gaussian, the sampler
+replaces the point mass with a Gaussian spike of fixed variance `--v0`
+(default `1e-3`), uses the product of nodewise Gaussian regression densities
+as a working likelihood, and targets the corresponding working posterior. The
+local graphs are still defined by the indicators, so every sampled triangle
+graph is acyclic, and the reported PIPs are posterior probabilities under
+this working model.
+
 ### Multi-chain diagnostics
 
 Run two or more chains with distinct seeds on the same bundle, then
