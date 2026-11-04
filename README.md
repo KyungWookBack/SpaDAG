@@ -4,8 +4,8 @@ SpaDAG takes an `(n, p)` data matrix and the `(n, 2)` spatial coordinates of
 its rows, and returns the posterior probability of every directed edge in
 every triangle of a mesh over the domain.
 
-SpaDAG is the method proposed in *Bayesian Spatially Heterogeneous Causal
-Discovery for Spatial Omics Data*. It infers the presence and orientation of
+SpaDAG is the method proposed in *Bayesian Learning of Spatially Heterogeneous Causal
+Structure for Spatial Omics*. It infers the presence and orientation of
 each causal edge among p variables at every location of a two-dimensional
 domain. Local graphs live on a triangulation of the domain; each is acyclic,
 but no ordering is shared across the domain, so a pair can point one way in
