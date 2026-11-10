@@ -25,6 +25,8 @@ def triangle_edge_recovery(
     edge_prob: np.ndarray,
     edge_true: np.ndarray,
     thresh: float = 0.5,
+    *,
+    triangle_mask: np.ndarray | None = None,
 ) -> Dict[str, float]:
     """TPR, FDR, and F1 for the triangle-level posterior graph.
 
@@ -32,6 +34,11 @@ def triangle_edge_recovery(
     indicator formed within each MCMC draw.  Applying the triangle OR only
     after thresholding marginal node-level PIPs is a different estimand and
     must not be used for triangle-level recovery.
+
+    ``triangle_mask`` (boolean, length K) restricts the pooled triangle--edge
+    units to the selected triangles; ``None`` pools over every triangle.
+    When no unit is selected, FDR is reported as 0 (the false discovery
+    proportion is undefined in that case).
     """
     probability = np.asarray(edge_prob, dtype=float)
     truth = np.asarray(edge_true)
@@ -67,6 +74,15 @@ def triangle_edge_recovery(
         raise ValueError("thresh must be a finite value in [0, 1]") from exc
     if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
         raise ValueError("thresh must be a finite value in [0, 1]")
+
+    if triangle_mask is not None:
+        keep = np.asarray(triangle_mask)
+        if keep.dtype != bool or keep.shape != (K,):
+            raise ValueError(f"triangle_mask must be a boolean array of shape ({K},)")
+        if not np.any(keep):
+            raise ValueError("triangle_mask must select at least one triangle")
+        probability = probability[keep]
+        truth = truth[keep]
 
     et = truth > 0
     eh = probability >= threshold

@@ -39,6 +39,27 @@ def test_fdr_is_zero_when_nothing_is_selected() -> None:
     assert summary["f1"] == 0.0
 
 
+def test_triangle_mask_restricts_pooled_units() -> None:
+    edge_prob = np.zeros((2, 2, 2), dtype=float)
+    edge_true = np.zeros((2, 2, 2), dtype=int)
+    edge_prob[0, 0, 1] = 0.9
+    edge_true[0, 0, 1] = 1
+    edge_true[1, 1, 0] = 1  # missed on the second triangle
+
+    pooled = triangle_edge_recovery(edge_prob, edge_true)
+    masked = triangle_edge_recovery(
+        edge_prob, edge_true, triangle_mask=np.array([True, False])
+    )
+
+    assert (pooled["tp"], pooled["fn"]) == (1, 1)
+    assert set(masked) == _EXPECTED_KEYS
+    assert (masked["tp"], masked["fp"], masked["fn"]) == (1, 0, 0)
+    assert masked["f1"] == 1.0
+    for bad in (np.array([1, 0]), np.array([True]), np.array([False, False])):
+        with np.testing.assert_raises(ValueError):
+            triangle_edge_recovery(edge_prob, edge_true, triangle_mask=bad)
+
+
 def test_recovery_inputs_are_validated_before_thresholding() -> None:
     valid_prob = np.zeros((1, 2, 2), dtype=float)
     valid_true = np.zeros((1, 2, 2), dtype=int)
@@ -75,5 +96,6 @@ def test_recovery_inputs_are_validated_before_thresholding() -> None:
 if __name__ == "__main__":
     test_triangle_edge_recovery()
     test_fdr_is_zero_when_nothing_is_selected()
+    test_triangle_mask_restricts_pooled_units()
     test_recovery_inputs_are_validated_before_thresholding()
     print("recovery metric checks passed")

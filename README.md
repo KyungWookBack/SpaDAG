@@ -85,7 +85,9 @@ spadag-evaluate \
 ```
 
 This reports TPR, FDR and F1 of the edges with PIP at least 0.5 against the
-true triangle graphs. With two retained sweeps these numbers only show that
+true triangle graphs, pooled over the triangles that contain at least one
+observation as in the manuscript (`--triangles all` pools over every
+triangle). With two retained sweeps these numbers only show that
 the pipeline runs; a chain for inference uses the default protocol of
 [docs/usage.md](docs/usage.md), which is the manuscript's setting of 50,000
 sweeps with a burn-in of 25,000:

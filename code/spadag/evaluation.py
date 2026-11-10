@@ -27,6 +27,38 @@ from .mesh_evaluation import (
 from .metrics import triangle_edge_recovery
 
 EVAL_POINT_CHOICES = ("triangle",) + EVALUATION_KINDS + ("both",)
+TRIANGLE_SCOPES = ("observed", "all")
+
+
+def observed_triangle_mask(
+    Phi: np.ndarray,
+    triangles: np.ndarray,
+    *,
+    tol: float = 1e-12,
+) -> np.ndarray:
+    """Boolean mask of triangles whose closure contains at least one observation.
+
+    An observation lies in the closed triangle ``K`` exactly when its nonzero
+    P1 basis weights (row of ``Phi``) are all at vertices of ``K``.  An
+    observation on a shared edge or vertex therefore counts for every
+    triangle containing it.
+    """
+    basis = np.asarray(Phi, dtype=float)
+    cells = np.asarray(triangles, dtype=int)
+    if basis.ndim != 2 or cells.ndim != 2 or cells.shape[1] != 3:
+        raise ValueError("Phi must be (n, H) and triangles must be (T, 3)")
+    if np.any(cells < 0) or np.any(cells >= basis.shape[1]):
+        raise ValueError("triangle index is outside the columns of Phi")
+    support = basis > tol
+    support_size = support.sum(axis=1)
+    if np.any(support_size == 0):
+        raise ValueError("every observation must have a positive P1 basis weight")
+    within = (
+        support[:, cells[:, 0]].astype(int)
+        + support[:, cells[:, 1]]
+        + support[:, cells[:, 2]]
+    )
+    return np.any(within == support_size[:, None], axis=0)
 
 
 def evaluate_reversal_recovery(
@@ -88,10 +120,15 @@ def evaluate_triangle_recovery(
     *,
     reversal_motifs: list[dict[str, object]] | None = None,
     threshold: float = 0.5,
+    triangle_mask: np.ndarray | None = None,
 ) -> dict[str, object]:
     """Evaluate the triangle-level graph target against simulation truth.
 
     Edges with posterior probability at least ``threshold`` are selected.
+    When ``triangle_mask`` is given, TPR/FDR/F1 pool only the triangle--edge
+    units on the selected triangles (the manuscript pools over triangles that
+    contain at least one observation; see ``observed_triangle_mask``).  The
+    reversal-motif summary is not restricted.
     """
     required = ("edge_prob",)
     missing = [name for name in required if name not in result]
@@ -101,9 +138,13 @@ def evaluate_triangle_recovery(
     edge_prob = np.asarray(result["edge_prob"], dtype=float)
     summary: dict[str, object] = {
         "triangle_recovery": triangle_edge_recovery(
-            edge_prob, edge_true, thresh=threshold
+            edge_prob, edge_true, thresh=threshold, triangle_mask=triangle_mask
         ),
     }
+    if triangle_mask is not None:
+        keep = np.asarray(triangle_mask, dtype=bool)
+        summary["evaluated_triangles"] = int(keep.sum())
+        summary["excluded_triangles"] = np.flatnonzero(~keep).tolist()
     if reversal_motifs:
         summary["reversal_recovery"] = evaluate_reversal_recovery(
             edge_prob,
@@ -146,6 +187,15 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--sobol-seed", type=int, default=SOBOL_DEFAULT_SEED)
     parser.add_argument("--threshold", type=float, default=0.5,
                         help="posterior probability at or above which an edge is selected (default 0.5)")
+    parser.add_argument(
+        "--triangles",
+        choices=TRIANGLE_SCOPES,
+        default="observed",
+        help=(
+            "triangle mode: pool TPR/FDR/F1 over triangles containing at least "
+            "one observation (default, as in the manuscript) or over all triangles"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -216,12 +266,19 @@ def main() -> None:
         if metadata_path.is_file():
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             reversal_motifs = metadata.get("reversal_motifs")
+        triangle_mask = (
+            observed_triangle_mask(data.Phi, data.triangles)
+            if args.triangles == "observed"
+            else None
+        )
         summary = evaluate_triangle_recovery(
             result,
             edge_true,
             reversal_motifs=reversal_motifs,
             threshold=args.threshold,
+            triangle_mask=triangle_mask,
         )
+        summary["triangle_scope"] = args.triangles
     else:
         kinds = EVALUATION_KINDS if args.eval_points == "both" else (args.eval_points,)
         summary["location_recovery"] = evaluate_location_recovery(
