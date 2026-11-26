@@ -4,8 +4,8 @@ SpaDAG takes an `(n, p)` data matrix and the `(n, 2)` spatial coordinates of
 its rows, and returns the posterior probability of every directed edge in
 every triangle of a mesh over the domain.
 
-SpaDAG is the method proposed in *Bayesian Learning of Spatially Heterogeneous Causal
-Structure in Spatial Transcriptomics*. It infers the presence and orientation of
+SpaDAG is the method proposed in
+[*Bayesian Learning of Spatially Heterogeneous Causal Structure in Spatial Transcriptomics*](https://arxiv.org/abs/2611.33094). It infers the presence and orientation of
 each causal edge among p variables at every location of a two-dimensional
 domain. Local graphs live on a triangulation of the domain; each is acyclic,
 but no ordering is shared across the domain, so a pair can point one way in
@@ -138,8 +138,21 @@ acyclic. See [docs/usage.md](docs/usage.md#working-model-of-the-sampler).
 
 ## Citation
 
-A preprint describing the method is in preparation. Citation details and a
-`CITATION.cff` file will be added here when it is available.
+If you use SpaDAG in your research, please cite the following preprint:
+
+```bibtex
+@misc{back2026spadag,
+  title         = {Bayesian Learning of Spatially Heterogeneous
+                   Causal Structure in Spatial Transcriptomics},
+  author        = {Back, Kyungwook and Choi, Junsouk},
+  year          = {2026},
+  eprint        = {2611.33094},
+  archivePrefix = {arXiv},
+  primaryClass  = {stat.ME},
+  doi           = {10.48550/arXiv.2611.33094},
+  url           = {https://arxiv.org/abs/2611.33094}
+}
+```
 
 ## License
 
