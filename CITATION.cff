@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use SpaDAG in your research, please cite the preprint below."
+type: software
+title: "SpaDAG"
+authors:
+  - family-names: "Back"
+    given-names: "Kyungwook"
+repository-code: "https://github.com/KyungWookBack/SpaDAG"
+
+preferred-citation:
+  type: generic
+  title: >-
+    Bayesian Learning of Spatially Heterogeneous
+    Causal Structure in Spatial Transcriptomics
+  authors:
+    - family-names: "Back"
+      given-names: "Kyungwook"
+    - family-names: "Choi"
+      given-names: "Junsouk"
+  year: 2026
+  doi: "10.48550/arXiv.2611.33094"
+  url: "https://arxiv.org/abs/2611.33094"
