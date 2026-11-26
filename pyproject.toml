@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "spadag"
 version = "0.1.0"
 description = "Spatially varying directed acyclic graph inference"
+readme = "README.md"
 authors = [
   { name = "Kyung Wook Back", email = "bkw02@korea.ac.kr" },
 ]
@@ -54,3 +55,8 @@ spadag = ["r_bridges/*.R"]
 testpaths = ["code/tests"]
 pythonpath = ["code"]
 addopts = "-ra"
+
+[project.urls]
+Paper = "https://arxiv.org/abs/2611.33094"
+Repository = "https://github.com/KyungWookBack/SpaDAG"
+Documentation = "https://github.com/KyungWookBack/SpaDAG/blob/main/docs/usage.md"
