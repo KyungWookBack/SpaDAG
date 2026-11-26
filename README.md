@@ -1,5 +1,7 @@
 # SpaDAG
 
+[![arXiv](https://img.shields.io/badge/arXiv-2611.33094-b31b1b.svg)](https://arxiv.org/abs/2611.33094)
+
 SpaDAG takes an `(n, p)` data matrix and the `(n, 2)` spatial coordinates of
 its rows, and returns the posterior probability of every directed edge in
 every triangle of a mesh over the domain.
